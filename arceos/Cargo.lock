@@ -348,9 +348,7 @@ dependencies = [
 
 [[package]]
 name = "axfs_ramfs"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f50c26614485d837a3fc09a92f24a226caddc25a30df7e6aaf4bd19b304c399"
+version = "0.1.1"
 dependencies = [
  "axfs_vfs",
  "log",

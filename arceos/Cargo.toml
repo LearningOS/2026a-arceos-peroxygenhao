@@ -94,6 +94,10 @@ axfs_ramfs = { path = "./axfs_ramfs" }
 
 [patch.crates-io]
 kernel_guard = { path = "../crates/kernel_guard"} 
+# `axfs_ramfs` 的 rename 支持是本练习要补的组件能力，必须让整个工作区改用
+# 仓库内的本地组件（`axfs_ramfs` 目录），否则 `new_myfs` 与 `/tmp` 挂载点仍会
+# 链接 crates.io 上未实现 rename 的版本。
+axfs_ramfs = { path = "./axfs_ramfs" }
 
 [profile.release]
 lto = true

@@ -67,6 +67,60 @@ impl DirNode {
         children.remove(name);
         Ok(())
     }
+
+    /// Renames `src_name` to `dst_name`, both located directly in this directory.
+    ///
+    /// Fails if `src_name` does not exist or if `dst_name` is already taken.
+    pub fn rename_node(&self, src_name: &str, dst_name: &str) -> VfsResult {
+        if src_name == dst_name {
+            return if self.exist(src_name) {
+                Ok(())
+            } else {
+                Err(VfsError::NotFound)
+            };
+        }
+        let mut children = self.children.write();
+        if !children.contains_key(src_name) {
+            return Err(VfsError::NotFound);
+        }
+        if children.contains_key(dst_name) {
+            return Err(VfsError::AlreadyExists);
+        }
+        let node = children.remove(src_name).ok_or(VfsError::NotFound)?;
+        children.insert(String::from(dst_name), node);
+        Ok(())
+    }
+
+    /// Resolves `path` to a sub-directory of `self`.
+    ///
+    /// An empty path (or a path made of `.` only) refers to `self`.
+    fn lookup_dir(&self, path: &str) -> VfsResult<Arc<DirNode>> {
+        let mut cur = self.this.upgrade().ok_or(VfsError::NotFound)?;
+        for comp in path.split('/') {
+            if comp.is_empty() || comp == "." {
+                continue;
+            }
+            let node: VfsNodeRef = if comp == ".." {
+                cur.parent().ok_or(VfsError::NotFound)?
+            } else {
+                cur.children
+                    .read()
+                    .get(comp)
+                    .cloned()
+                    .ok_or(VfsError::NotFound)?
+            };
+            cur = dir_node_of(node)?;
+        }
+        Ok(cur)
+    }
+}
+
+/// Casts a VFS node to the RAM filesystem directory node behind it.
+fn dir_node_of(node: VfsNodeRef) -> VfsResult<Arc<DirNode>> {
+    node.as_any()
+        .downcast_ref::<DirNode>()
+        .and_then(|dir| dir.this.upgrade())
+        .ok_or(VfsError::NotADirectory)
 }
 
 impl VfsNodeOps for DirNode {
@@ -165,7 +219,44 @@ impl VfsNodeOps for DirNode {
         }
     }
 
+    /// Renames a node inside this directory.
+    ///
+    /// Only renaming is supported, not moving: the destination must live in the
+    /// same directory as the source. `dst_path` may still be an absolute path
+    /// that starts with this filesystem's mount point (that is how
+    /// `axfs::root::rename` reaches a mounted filesystem), so only its last
+    /// component is used as the new name.
+    fn rename(&self, src_path: &str, dst_path: &str) -> VfsResult {
+        log::debug!("rename at ramfs: {} -> {}", src_path, dst_path);
+
+        let (src_dir_path, src_name) = split_name(src_path);
+        let (dst_dir_path, dst_name) = split_name(dst_path);
+        for name in [src_name, dst_name] {
+            if name.is_empty() || name == "." || name == ".." {
+                return Err(VfsError::InvalidInput);
+            }
+        }
+
+        let src_dir = self.lookup_dir(src_dir_path)?;
+        // A destination directory that cannot be resolved from here belongs to
+        // the mount point prefix of the caller; anything that resolves must be
+        // the source directory itself, otherwise this would be a move.
+        match self.lookup_dir(dst_dir_path) {
+            Ok(dst_dir) if !Arc::ptr_eq(&dst_dir, &src_dir) => return Err(VfsError::Unsupported),
+            _ => {}
+        }
+
+        src_dir.rename_node(src_name, dst_name)
+    }
+
     axfs_vfs::impl_vfs_dir_default! {}
+}
+
+/// Splits a path into its parent path and its last component.
+fn split_name(path: &str) -> (&str, &str) {
+    let path = path.trim_end_matches('/');
+    path.rfind('/')
+        .map_or(("", path), |i| (&path[..i], &path[i + 1..]))
 }
 
 fn split_path(path: &str) -> (&str, Option<&str>) {
