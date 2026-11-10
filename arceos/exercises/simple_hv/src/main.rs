@@ -29,6 +29,34 @@ use crate::regs::GprIndex::{A0, A1};
 
 const VM_ENTRY: usize = 0x8020_0000;
 
+/// Guest physical address that the hypervisor exposes as an emulated device
+/// register: `skernel2` loads its first SBI argument from here.
+const GUEST_DEVICE_REG: usize = 0x40;
+
+/// Value returned when the guest reads [`GUEST_DEVICE_REG`].
+const GUEST_DEVICE_VALUE: usize = 0x6688;
+
+/// Virtual hart id reported to the guest. The guest has no M-mode and therefore
+/// no `mhartid` CSR, so the hypervisor answers on its behalf.
+const GUEST_HART_ID: usize = 0x1234;
+
+/// A RISC-V instruction is at least 2 bytes (compressed) and at most 4 bytes.
+/// Skipping the trapping instruction needs its exact length, otherwise the
+/// `sret` back into the guest re-executes the same instruction forever.
+///
+/// The guest image is loaded into freshly allocated frames, so a guest physical
+/// address is *not* the same as the hypervisor's physical address and the
+/// instruction cannot be peeked at through the linear mapping. The two
+/// instructions the hypervisor emulates are fixed by `payload/skernel2`:
+///
+/// ```text
+/// 80200000: f3 25 40 f1   csrr a1, mhartid
+/// 80200004: 03 35 00 04   ld   a0, 0x40(zero)
+/// ```
+///
+/// Both are 32-bit instructions (`llvm-objdump -d` on the release binary).
+const GUEST_INSN_LEN: usize = 4;
+
 #[cfg_attr(feature = "axstd", no_mangle)]
 fn main() {
     ax_println!("Hypervisor ...");
@@ -53,7 +81,10 @@ fn main() {
     while !run_guest(&mut ctx) {
     }
 
-    panic!("Hypervisor ok!");
+    // The guest asked to be shut down and the hypervisor emulated the request,
+    // so the whole machine can now go down normally (instead of panicking).
+    ax_println!("Hypervisor exit [ok]!");
+    axhal::misc::terminate();
 }
 
 fn prepare_vm_pgtable(ept_root: PhysAddr) {
@@ -102,16 +133,41 @@ fn vmexit_handler(ctx: &mut VmCpuRegisters) -> bool {
             }
         },
         Trap::Exception(Exception::IllegalInstruction) => {
-            panic!("Bad instruction: {:#x} sepc: {:#x}",
-                stval::read(),
-                ctx.guest_regs.sepc
+            // First VM-exit reason: the guest executed an instruction that does
+            // not exist in VS-mode. `skernel2` reads `mhartid`, a machine-level
+            // CSR, because it expects to run on bare metal. Emulate the read by
+            // answering a virtual hart id and resume after the instruction.
+            let pc = ctx.guest_regs.sepc;
+            ax_println!(
+                "VmExit Reason: IllegalInstruction at {:#x}, emulate csrr mhartid",
+                pc
             );
+            ctx.guest_regs.gprs.set_reg(A1, GUEST_HART_ID);
+            ctx.guest_regs.sepc = pc + GUEST_INSN_LEN;
+            return false;
         },
         Trap::Exception(Exception::LoadGuestPageFault) => {
-            panic!("LoadGuestPageFault: stval{:#x} sepc: {:#x}",
-                stval::read(),
-                ctx.guest_regs.sepc
+            // Second VM-exit reason: the guest touched a guest physical address
+            // that has no second-stage mapping. That address is an emulated
+            // device register, so answer the load and resume after it.
+            let faulting_addr = stval::read();
+            if faulting_addr != GUEST_DEVICE_REG {
+                panic!(
+                    "LoadGuestPageFault at {:#x}: stval {:#x} sepc: {:#x}",
+                    faulting_addr,
+                    faulting_addr,
+                    ctx.guest_regs.sepc
+                );
+            }
+            let pc = ctx.guest_regs.sepc;
+            ax_println!(
+                "VmExit Reason: LoadGuestPageFault at {:#x}, emulate device register {:#x}",
+                pc,
+                GUEST_DEVICE_REG
             );
+            ctx.guest_regs.gprs.set_reg(A0, GUEST_DEVICE_VALUE);
+            ctx.guest_regs.sepc = pc + GUEST_INSN_LEN;
+            return false;
         },
         _ => {
             panic!(
