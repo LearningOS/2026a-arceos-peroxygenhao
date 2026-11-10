@@ -1,13 +1,16 @@
 #![allow(dead_code)]
 
 use core::ffi::{c_void, c_char, c_int};
+use alloc::vec;
 use axhal::arch::TrapFrame;
+use axhal::mem::{MemoryAddr, VirtAddr, PAGE_SIZE_4K};
 use axhal::trap::{register_trap_handler, SYSCALL};
 use axerrno::LinuxError;
 use axtask::current;
 use axtask::TaskExtRef;
 use axhal::paging::MappingFlags;
 use arceos_posix_api as api;
+use memory_addr::VirtAddrRange;
 
 const SYS_IOCTL: usize = 29;
 const SYS_OPENAT: usize = 56;
@@ -131,16 +134,116 @@ fn handle_syscall(tf: &TrapFrame, syscall_num: usize) -> isize {
     ret
 }
 
-#[allow(unused_variables)]
+/// Where an anonymous or file mapping is placed when the caller lets the kernel
+/// choose the address (`addr == NULL`). It sits well above the boot-time
+/// mappings of the loaded application and below the user stack.
+const MMAP_BASE_HINT: usize = 0x1000_0000;
+
+/// Maps a file (or anonymous memory) into the address space of the current
+/// process and returns the address of the new mapping.
+///
+/// This is the `mmap(2)` system call of the monolithic kernel built in this
+/// exercise:
+///
+/// * the requested length is rounded up to whole pages;
+/// * a free virtual range is reserved in the address space of the current task
+///   (or the given address is used when `MAP_FIXED` is set);
+/// * the pages are populated and, for a file-backed mapping, the first
+///   `length` bytes of the file are copied into the fresh pages, so the caller
+///   can read the file content through a plain pointer.
 fn sys_mmap(
     addr: *mut usize,
     length: usize,
     prot: i32,
     flags: i32,
     fd: i32,
-    _offset: isize,
+    offset: isize,
 ) -> isize {
-    unimplemented!("no sys_mmap!");
+    ax_println!(
+        "sys_mmap: addr={:#x}, length={:#x}, prot={:#x}, flags={:#x}, fd={}, offset={:#x}",
+        addr as usize,
+        length,
+        prot,
+        flags,
+        fd,
+        offset,
+    );
+
+    if length == 0 {
+        return -LinuxError::EINVAL.code() as isize;
+    }
+
+    let prot = MmapProt::from_bits_truncate(prot);
+    let mmap_flags = MmapFlags::from_bits_truncate(flags);
+    let map_flags = MappingFlags::from(prot);
+    let size = (length + PAGE_SIZE_4K - 1) & !(PAGE_SIZE_4K - 1);
+
+    let curr = current();
+    let aspace = curr.task_ext().aspace.clone();
+    let mut uspace = aspace.lock();
+
+    // Pick the virtual address range for the new mapping.
+    let hint = if addr.is_null() {
+        VirtAddr::from_usize(MMAP_BASE_HINT)
+    } else {
+        VirtAddr::from_usize(addr as usize).align_down_4k()
+    };
+    let vaddr = if mmap_flags.contains(MmapFlags::MAP_FIXED) && !addr.is_null() {
+        hint
+    } else {
+        match uspace.find_free_area(
+            hint,
+            size,
+            VirtAddrRange::from_start_size(uspace.base(), uspace.size()),
+        ) {
+            Some(vaddr) => vaddr,
+            None => return -LinuxError::ENOMEM.code() as isize,
+        }
+    };
+
+    if uspace.map_alloc(vaddr, size, map_flags, true).is_err() {
+        return -LinuxError::ENOMEM.code() as isize;
+    }
+
+    if !mmap_flags.contains(MmapFlags::MAP_ANONYMOUS) {
+        // File-backed mapping: copy the beginning of the file into the freshly
+        // allocated pages. Anonymous mappings are already zero-filled.
+        if fd < 0 {
+            let _ = uspace.unmap(vaddr, size);
+            return -LinuxError::EBADF.code() as isize;
+        }
+        if offset > 0 {
+            let pos = api::sys_lseek(fd, offset as _, 0);
+            if pos < 0 {
+                let _ = uspace.unmap(vaddr, size);
+                return pos as isize;
+            }
+        }
+
+        let mut buf = vec![0u8; length];
+        let count = api::sys_read(fd, buf.as_mut_ptr() as *mut c_void, length);
+        if count < 0 {
+            let _ = uspace.unmap(vaddr, size);
+            return count;
+        }
+        let count = count as usize;
+        if count > 0 {
+            if let Err(err) = uspace.write(vaddr, &buf[..count]) {
+                ax_println!("sys_mmap: failed to fill mapping: {:?}", err);
+                let _ = uspace.unmap(vaddr, size);
+                return -LinuxError::EFAULT.code() as isize;
+            }
+        }
+        ax_println!(
+            "sys_mmap: mapped {} bytes from fd {} at {:#x} ({} page(s))",
+            count,
+            fd,
+            vaddr.as_usize(),
+            size / PAGE_SIZE_4K
+        );
+    }
+
+    vaddr.as_usize() as isize
 }
 
 fn sys_openat(dfd: c_int, fname: *const c_char, flags: c_int, mode: api::ctypes::mode_t) -> isize {
