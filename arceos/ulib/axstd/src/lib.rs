@@ -55,10 +55,15 @@ extern crate alloc;
 
 #[cfg(feature = "alloc")]
 #[doc(no_inline)]
-pub use alloc::{boxed, collections, format, string, vec};
+pub use alloc::{boxed, format, string, vec};
 
 #[doc(no_inline)]
 pub use core::{arch, cell, cmp, hint, marker, mem, ops, ptr, slice, str};
+
+// `axstd` provides its own `collections` module: it re-exports the `alloc`
+// containers and adds a `HashMap` (which `alloc` does not have).
+#[cfg(feature = "alloc")]
+pub mod collections;
 
 #[macro_use]
 mod macros;
