@@ -1,0 +1,21 @@
+{
+  "name": "ArceOS",
+  "image": "docker.io/1301182193/arceos-env@sha256:6e2cd3cd113a743967fd9f1e8cc1456cde59913a3a02e5878b9086fe696c1bcf",
+  "runArgs": [
+    "--platform=linux/amd64",
+    "--hostname=arceos"
+  ],
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+  "workspaceFolder": "/workspace",
+  "remoteUser": "root",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer"
+      ],
+      "settings": {
+        "rust-analyzer.server.path": "/opt/cargo/bin/rust-analyzer"
+      }
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "name": "2026a-arceos",
+  "title": "项目先导阶段 — 组件化操作系统",
+  "courseId": 2078,
+  "totalScore": 600,
+  "secret": "OSCAMP_2026A_ARCEOS_TOKEN",
+  "source": "LearningOS/2026s-oscamp-professional-2026s-arceos-arceos-classroom-2026s-arceos-oscamp",
+  "tests": [
+    {
+      "name": "print_with_color",
+      "score": 100
+    },
+    {
+      "name": "ramfs_rename",
+      "score": 100
+    },
+    {
+      "name": "alt_alloc",
+      "score": 100
+    },
+    {
+      "name": "support_hashmap",
+      "score": 100
+    },
+    {
+      "name": "sys_map",
+      "score": 100
+    },
+    {
+      "name": "simple_hv",
+      "score": 100
+    }
+  ],
+  "sourceCommit": "85237911b8fb71ac94d7a7c51597ebec6b73e939",
+  "organization": "LearningOS"
+}

@@ -1,0 +1,6 @@
+{
+  "rust-analyzer.linkedProjects": ["arceos/Cargo.toml"],
+  "rust-analyzer.cargo.target": "riscv64gc-unknown-none-elf",
+  "rust-analyzer.cargo.allTargets": false,
+  "rust-analyzer.cargo.features": ["axstd"]
+}

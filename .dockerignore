@@ -1,0 +1,11 @@
+**
+!arceos/
+!arceos/**/
+!arceos/**/Cargo.toml
+!arceos/**/src/
+!arceos/**/src/**
+!arceos/Cargo.lock
+!arceos/rust-toolchain.toml
+!crates/
+!crates/**
+arceos/target/

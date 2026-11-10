@@ -1,0 +1,99 @@
+[workspace]
+resolver = "2"
+
+members = [
+    "modules/axalloc",
+    "modules/alt_axalloc",
+    "modules/axconfig",
+    "modules/axdisplay",
+    "modules/axdriver",
+    "modules/axfs",
+    "modules/axhal",
+    "modules/axlog",
+    "modules/axmm",
+    "modules/axdma",
+    "modules/axnet",
+    "modules/axruntime",
+    "modules/axsync",
+    "modules/axtask",
+    "modules/bump_allocator",
+    "modules/riscv_vcpu",
+
+    "api/axfeat",
+    "api/arceos_api",
+    "api/arceos_posix_api",
+
+    "ulib/axstd",
+    "ulib/axlibc",
+
+    "payload/origin",
+    "payload/skernel",
+    "payload/skernel2",
+
+    "tour/u_1_0",
+    "tour/u_2_0",
+    "tour/u_3_0",
+    "tour/u_4_0",
+    "tour/u_5_0",
+    "tour/u_6_0",
+    "tour/u_6_1",
+    "tour/u_7_0",
+    "tour/u_8_0",
+    "tour/m_1_0",
+    "tour/m_1_1",
+    "tour/m_2_0",
+    "tour/m_3_0",
+    "tour/m_3_1",
+    "tour/h_1_0",
+    "tour/h_2_0",
+    "tour/h_3_0",
+    "tour/h_4_0",
+
+    "exercises/print_with_color",
+    "exercises/support_hashmap",
+    "exercises/alt_alloc",
+    "exercises/sys_map",
+    "exercises/simple_hv",
+    "exercises/ramfs_rename",
+]
+
+[workspace.package]
+version = "0.1.0"
+authors = ["Yuekai Jia <equation618@gmail.com>"]
+license = "GPL-3.0-or-later OR Apache-2.0 OR MulanPSL-2.0"
+homepage = "https://github.com/arceos-org/arceos"
+documentation = "https://arceos-org.github.io/arceos"
+repository = "https://github.com/arceos-org/arceos"
+keywords = ["arceos", "kernel"]
+categories = ["os", "no-std"]
+
+[workspace.dependencies]
+axstd = { path = "ulib/axstd" }
+axlibc = { path = "ulib/axlibc" }
+
+arceos_api = { path = "api/arceos_api" }
+arceos_posix_api = { path = "api/arceos_posix_api", features = ["fs", "fd"] }
+axfeat = { path = "api/axfeat" }
+
+axalloc = { path = "modules/axalloc" }
+alt_axalloc = { path = "modules/alt_axalloc" }
+axconfig = { path = "modules/axconfig" }
+axdisplay = { path = "modules/axdisplay" }
+axdriver = { path = "modules/axdriver" }
+axfs = { path = "modules/axfs" }
+axhal = { path = "modules/axhal" }
+axlog = { path = "modules/axlog" }
+axmm = { path = "modules/axmm" }
+axnet = { path = "modules/axnet" }
+axruntime = { path = "modules/axruntime" }
+axsync = { path = "modules/axsync" }
+axtask = { path = "modules/axtask" }
+axdma = { path = "modules/axdma" }
+elf = { path = "modules/elf" }
+axfs_ramfs = { path = "./axfs_ramfs" }
+
+[patch.crates-io]
+kernel_guard = { path = "../crates/kernel_guard"} 
+
+[profile.release]
+lto = true

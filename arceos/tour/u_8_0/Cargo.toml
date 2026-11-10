@@ -1,0 +1,7 @@
+[package]
+name = "u_8_0"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axstd = { workspace = true, features = ["alloc", "paging", "multitask", "sched_cfs", "fs"], optional = true }

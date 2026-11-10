@@ -1,0 +1,8 @@
+[package]
+name = "u_7_0"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axstd = { workspace = true, features = ["alloc", "paging", "multitask", "sched_cfs"], optional = true }
+axdriver = { workspace = true, features = ["virtio-blk"] }
